@@ -20,6 +20,8 @@ or
 python3 --version
 ```
 
+You will also need to go to Groq Cloud and get a Groq API key. Chage the name of env.template to .env and add your API key. Do the same thing for the WolframAlpha API. Also, consider getting a SerpApi API key as well and add it to the .env file. As this project grows more API keys will probably be needed, but I intend to keep everything free and open source.
+
 ### Installation
 1. Clone the Repository:
 ```bash

@@ -105,7 +105,7 @@ class Squad(BaseModel):
         description="Whether the squad should use memory to store memories of it's execution",
     )
     embedder: Optional[dict] = Field(
-        default={"provider": "spacy"},
+        default={"provider": "cohere"},
         description="Configuration for the embedder to be used for the squad.",
     )
     usage_metrics: Optional[UsageMetrics] = Field(

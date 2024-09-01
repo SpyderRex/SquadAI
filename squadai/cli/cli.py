@@ -1,7 +1,9 @@
+import os
 from typing import Optional
 
 import click
 import pkg_resources
+from dotenv import load_dotenv
 
 from squadai.cli.create_squad import create_squad
 from squadai.cli.create_pipeline import create_pipeline
@@ -15,6 +17,8 @@ from .replay_from_task import replay_task_command
 from .reset_memories_command import reset_memories_command
 from .run_squad import run_squad
 from .train_squad import train_squad
+
+load_dotenv()
 
 
 @click.group()
@@ -142,7 +146,7 @@ def reset_memories(long, short, entities, kickoff_outputs, all):
     "-m",
     "--model",
     type=str,
-    default="llama-3.1-70b-versatile",
+    default=os.getenv("GROQ_MODEL_NAME"),
     help="LLM Model to run the tests on the Squad. For now only accepting only Llama model.",
 )
 def test(n_iterations: int, model: str):

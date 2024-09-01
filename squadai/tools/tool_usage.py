@@ -6,13 +6,15 @@ from typing import Any, List, Union
 
 from langchain_core.tools import BaseTool
 from langchain_groq import ChatGroq
+from dotenv import load_dotenv
 
 from squadai.agents.tools_handler import ToolsHandler
 from squadai.tools.tool_calling import InstructorToolCalling, ToolCalling
 from squadai.utilities import I18N, Converter, ConverterError, Printer
 
+load_dotenv()
 
-GROQ_BIGGER_MODELS = ["llama-3.1-70b-versatile"]
+GROQ_BIGGER_MODELS = [os.getenv("GROQ_MODEL_NAME")]
 
 
 class ToolUsageErrorException(Exception):

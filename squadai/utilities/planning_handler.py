@@ -1,11 +1,14 @@
+import os
 from typing import Any, List, Optional
 
 from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 
 from squadai.agent import Agent
 from squadai.task import Task
 
+load_dotenv()
 
 class PlanPerTask(BaseModel):
     task: str = Field(..., description="The task for which the plan is created")
@@ -27,7 +30,7 @@ class SquadPlanner:
         self.tasks = tasks
 
         if planning_agent_llm is None:
-            self.planning_agent_llm = ChatGroq(model="llama-3.1-70b-versatile")
+            self.planning_agent_llm = ChatGroq(model=os.getenv("GROQ_MODEL_NAME"))
         else:
             self.planning_agent_llm = planning_agent_llm
 

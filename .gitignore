@@ -5,3 +5,5 @@ __pycache__/
 Workspace/
 
 venv/
+
+find_os.py

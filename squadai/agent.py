@@ -77,7 +77,7 @@ class Agent(BaseAgent):
     )
     llm: Any = Field(
         default_factory=lambda: ChatGroq(
-            model=os.environ.get("GROQ_MODEL_NAME", "llama-3.1-70b-versatile")
+            model=os.environ.get("GROQ_MODEL_NAME")
         ),
         description="Language model that will run the agent.",
     )

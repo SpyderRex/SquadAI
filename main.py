@@ -1,8 +1,7 @@
 import os
 import json
-import asyncio
 from typing import List, Dict, Any
-from squadai import Agent, Task, Squad, Process, Pipeline
+from squadai import Agent, Task, Squad, Process
 from squadai.squadai_tools import FileWriterTool
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.tools import WikipediaQueryRun
@@ -27,8 +26,6 @@ copy_file_tool = tool_registry.get("copy_file")
 delete_file_tool = tool_registry.get("delete_file")
 file_search_tool = tool_registry.get("file_search")
 move_file_tool = tool_registry.get("move_file")
-
-
 
 # Set up Groq API (make sure to set your API key in the environment variables)
 groq_api_key = os.getenv("GROQ_API_KEY")
@@ -97,7 +94,7 @@ def create_agent(agent_config: Dict[str, Any]) -> Agent:
     Create an Agent instance from a configuration dictionary.
     """
     tools = []
-    if "search_tool" in agent_config["tools"]:
+    if "duckduckgo_tool" in agent_config["tools"]:
         tools.append(duckduckgo_tool)
     if "wikipedia_tool" in agent_config["tools"]:
         tools.append(wikipedia_tool)
@@ -105,6 +102,18 @@ def create_agent(agent_config: Dict[str, Any]) -> Agent:
         tools.append(wolframalpha_tool)
     if "write_file_tool" in agent_config["tools"]:
         tools.append(write_file_tool)
+    if "read_file_tool" in agent_config["tools"]:
+        tools.append(read_file_tool)
+    if "list_directory_tool" in agent_config["tools"]:
+        tools.append(list_directory_tool)
+    if "copy_file_tool" in agent_config["tools"]:
+        tools.append(copy_file_tool)
+    if "delete_file_tool" in agent_config["tools"]:
+        tools.append(delete_file_tool)
+    if "file_search_tool" in agent_config["tools"]:
+        tools.append(file_search_tool)
+    if "move_file_tool" in agent_config["tools"]:
+        tools.append(move_file_tool)
 
     return Agent(
         role=agent_config["role"],
@@ -128,7 +137,7 @@ def create_task(task_config: Dict[str,Any], agents: List[Agent]) -> Task:
 
 def create_squad(squad_config: Dict[str, Any], agents: List[Agent], tasks: List[Task]) -> Squad:
     """
-    Create a Squad instace from configuration dictionary, a list of available agents, and a list of tasks.
+    Create a Squad instance from configuration dictionary, a list of available agents, and a list of tasks.
     """
     squad_agents = [next(agent for agent in agents if agent.role == role) for role in squad_config["agents"]]
     squad_tasks = [next(task for task in tasks if task.description == desc) for desc in squad_config["tasks"]]
@@ -148,89 +157,47 @@ def create_squad(squad_config: Dict[str, Any], agents: List[Agent], tasks: List[
         agents=squad_agents,
         tasks=squad_tasks,
         process=Process.sequential if squad_config["process"] == "sequential" else Process.hierarchical,
+        memory=True,
+        embedder={
+            "provider": "cohere",
+            "config": {
+                "model": "embed-english-v3.0", "vector_dimension": 1024
+                }
+            },
         verbose=squad_config["verbose"],
         manager_agent=manager
     )
 
-def create_pipeline(pipeline_config: List[str], squads: List[Squad]) -> Pipeline:
+def run_squad(config: Dict[str, Any], user_prompt: str) -> str:
     """
-    Create a Pipeline instance from a configuration list and a list of available squads.
-    """
-    pipeline_squads = [next(squad for squad in squads if squad.name == squad_name) for squad_name in pipeline_config]
-    return Pipeline(stages=pipeline_squads)
-
-def needs_wolframalpha(config: Dict[str, Any]) -> bool:
-    """
-    Check if any agent in the configuration uses the Wolfram Alpha tool.
-    """
-    for agent in config["agents"]:
-        if "wolframalpha_tool" in agent["tools"]:
-            return True
-    return False
-
-def run_sync_squad(config: Dict[str, Any], user_prompt: str) -> str:
-    """
-    Run the squad synchronously when Wolfram Alpha is needed or there's no pipeline.
+    Run the squad based on the configuration.
     """
     agents = [create_agent(agent_config) for agent_config in config["agents"]]
     tasks = [create_task(task_config, agents) for task_config in config["tasks"]]
     squads = [create_squad(squad_config, agents, tasks) for squad_config in config["squads"]]
 
-    if "pipeline" in config:
-        inputs = [{"initial query": user_prompt}]
-        pipeline = create_pipeline(config["pipeline"], squads)
-        result = pipeline.kickoff(inputs=inputs)
-        return result[0].raw
-    else:
-        result = "Running squads individually (sync mode):\n"
-        for squad in squads:
-            squad_result = squad.kickoff()
-            result += f"\n{squad.name}: {squad_result}"
-        return result
-
-async def run_async_squad(config: Dict[str, Any], user_prompt: str) -> str:
-    """
-    Run the squad asynchronously when a pipeline is used and Wolfram Alpha is not needed.
-    """
-    agents = [create_agent(agent_config) for agent_config in config["agents"]]
-    tasks = [create_task(task_config, agents) for task_config in config["tasks"]]
-    squads = [create_squad(squad_config, agents, tasks) for squad_config in config["squads"]]
-
-    if "pipeline" in config:
-        inputs = [{"initial query": user_prompt}]
-        pipeline = create_pipeline(config["pipeline"], squads)
-        result = await pipeline.kickoff(inputs=inputs)
-        return result[0].raw
-    else:
-        result = "No pipeline defined. Running squads individually (async mode):\n"
-        for squad in squads:
-            squad_result = await squad.kickoff()
-            result += f"\n{squad.name}: {squad_result}"
-        return result
+    result = "Running squads:\n"
+    for squad in squads:
+        squad_result = squad.kickoff()
+        result += f"\n{squad.name}: {squad_result}"
+    return result
 
 def run_dynamic_squad(user_prompt: str) -> str:
     """
     Run a dynamically created squadAI based on the user's prompt.
     """
     config = get_squad_config(user_prompt)
-    
-    if needs_wolframalpha(config) or "pipeline" not in config:
-        return run_sync_squad(config, user_prompt)
-    else:
-        return asyncio.run(run_async_squad(config, user_prompt))
+    return run_squad(config, user_prompt)
 
 def main():
     user_prompt = input("Enter your goal for squadAI: ")
     try:
         result = run_dynamic_squad(user_prompt)
 
-        print("-----------------------------")
-        print("SquadAI Result:")
-        print(result)
-
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         print("Please try again with a different prompt or check your configuration.")
+    
 
 if __name__ == "__main__":
     main()

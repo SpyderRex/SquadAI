@@ -70,7 +70,7 @@ class TaskEvaluator:
 
         instructions = "Convert all responses into valid JSON output."
 
-        if not self._is_gpt(self.llm):
+        if not self._is_llama(self.llm):
             model_schema = PydanticSchemaParser(model=TaskEvaluation).get_schema()
             instructions = f"{instructions}\n\nReturn only valid JSON with the following schema:\n```json\n{model_schema}\n```"
 
@@ -116,7 +116,7 @@ class TaskEvaluator:
         )
         instructions = "I'm gonna convert this raw text into valid JSON."
 
-        if not self._is_gpt(self.llm):
+        if not self._is_llama(self.llm):
             model_schema = PydanticSchemaParser(
                 model=TrainingTaskEvaluation
             ).get_schema()

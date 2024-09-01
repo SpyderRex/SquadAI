@@ -195,7 +195,7 @@ def convert_with_instructions(
 
 def get_conversion_instructions(model: Type[BaseModel], llm: Any) -> str:
     instructions = "I'm gonna convert this raw text into valid JSON."
-    if not is_gpt(llm):
+    if not is_llama(llm):
         model_schema = PydanticSchemaParser(model=model).get_schema()
         instructions = f"{instructions}\n\nThe json should have the following structure, with the following keys:\n{model_schema}"
     return instructions

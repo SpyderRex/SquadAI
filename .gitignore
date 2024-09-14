@@ -1,0 +1,9 @@
+__pycache__/
+
+.env
+
+Workspace/
+
+venv/
+
+find_os.py

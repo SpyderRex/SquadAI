@@ -1,11 +1,7 @@
 import os
 import json
-from typing import List, Dict, Any
+from typing import Dict, Any
 from squadai import Agent, Task, Squad, Process
-from squadai.squadai_tools import FileWriterTool
-from langchain_community.tools import DuckDuckGoSearchRun
-from langchain_community.tools import WikipediaQueryRun
-from langchain_community.utilities import WikipediaAPIWrapper
 from groq import Groq
 from dotenv import load_dotenv
 from tool_reg import tool_registry
@@ -29,14 +25,12 @@ file_search_tool = tool_registry.get("file_search")
 move_file_tool = tool_registry.get("move_file")
 scrape_tool = BrowserTools.scrape_and_summarize_website
 
-# Set up Groq API (make sure to set your API key in the environment variables)
+# Initialize Groq client
 groq_api_key = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=groq_api_key)
 
 def get_squad_config(user_prompt: str) -> Dict[str, Any]:
-    """
-    Use Groq's API to generate a SquadAI configuration based on the user's prompt.
-    """
+    """Generate a SquadAI configuration based on the user's prompt."""
     with open("system_message.txt", "r") as f:
         system_message = f.read()
 
@@ -48,30 +42,19 @@ def get_squad_config(user_prompt: str) -> Dict[str, Any]:
         ]
     )
 
-    llm_response = response.choices[0].message.content
-    print("Raw LLM response:", llm_response)
-
-    # Remove backticks if present
-    llm_response = llm_response.strip('`')
+    llm_response = response.choices[0].message.content.strip('`')
     if llm_response.startswith('json'):
         llm_response = llm_response[4:].strip()
 
     try:
-        config = json.loads(llm_response)
+        return json.loads(llm_response)
     except json.JSONDecodeError:
         print("Error: Invalid JSON. Attempting to fix...")
-        config = fix_json(llm_response)
-
-    return config
+        return fix_json(llm_response)
 
 def fix_json(invalid_json: str) -> Dict[str, Any]:
-    """
-    Attempt to fix invalid JSON by sending it back to the LLM for correction.
-    """
-    system_message = """
-    The following JSON is invalid. Please correct any syntax errors and return a valid JSON object.
-    Only respond with the corrected JSON, nothing else.
-    """
+    """Attempt to fix invalid JSON using the LLM."""
+    system_message = "The following JSON is invalid. Please correct any syntax errors and return a valid JSON object. Only respond with the corrected JSON, nothing else."
 
     response = client.chat.completions.create(
         model="llama-3.1-70b-versatile",
@@ -81,8 +64,7 @@ def fix_json(invalid_json: str) -> Dict[str, Any]:
         ]
     )
 
-    corrected_json = response.choices[0].message.content
-    corrected_json = corrected_json.strip('`')
+    corrected_json = response.choices[0].message.content.strip('`')
     if corrected_json.startswith('json'):
         corrected_json = corrected_json[4:].strip()
 
@@ -92,9 +74,7 @@ def fix_json(invalid_json: str) -> Dict[str, Any]:
         raise ValueError("Unable to generate valid JSON configuration. Please try again with a different prompt.")
 
 def create_agent(agent_config: Dict[str, Any]) -> Agent:
-    """
-    Create an Agent instance from a configuration dictionary.
-    """
+    """Create an Agent instance from a configuration dictionary."""
     tools = []
     if "duckduckgo_tool" in agent_config["tools"]:
         tools.append(duckduckgo_tool)
@@ -118,7 +98,7 @@ def create_agent(agent_config: Dict[str, Any]) -> Agent:
         tools.append(move_file_tool)
     if "scrape_tool" in agent_config["tools"]:
         tools.append(scrape_tool)
-
+    
     return Agent(
         role=agent_config["role"],
         goal=agent_config["goal"],
@@ -128,30 +108,24 @@ def create_agent(agent_config: Dict[str, Any]) -> Agent:
         tools=tools
     )
 
-def create_task(task_config: Dict[str,Any], agents: List[Agent]) -> Task:
-    """
-    Create a Task instance from a configuration dictionary and a list of available agents.
-    """
-    agent = next(agent for agent in agents if agent.role == task_config["agent"])
+def create_task(task_config: Dict[str, Any], agent: Agent) -> Task:
+    """Create a Task instance from a configuration dictionary and an agent."""
     return Task(
         description=task_config["description"],
         expected_output=task_config["expected_output"],
         agent=agent
     )
 
-def create_squad(squad_config: Dict[str, Any], agents: List[Agent], tasks: List[Task]) -> Squad:
-    """
-    Create a Squad instance from configuration dictionary, a list of available agents, and a list of tasks.
-    """
-    squad_agents = [next(agent for agent in agents if agent.role == role) for role in squad_config["agents"]]
-    squad_tasks = [next(task for task in tasks if task.description == desc) for desc in squad_config["tasks"]]
+def create_squad(squad_config: Dict[str, Any], agents: Dict[str, Agent], tasks: list[Task]) -> Squad:
+    """Create a Squad instance from a configuration dictionary, agents, and tasks."""
+    squad_agents = [agents[role] for role in squad_config["agents"]]
 
     manager = None
     if squad_config["process"] == "hierarchical":
         manager = Agent(
             role="Project Manager",
             goal="Efficiently manage the squad and ensure high-quality task completion",
-            backstory="You're an experienced project manager, skilled in overseeing complex projects and guiding teams to success. Your role is to coordinate the efforts of the squad members, ensuring that each task is completed on time and to the highest standard.",
+            backstory="You're an experienced project manager, skilled in overseeing complex projects and guiding teams to success.",
             allow_delegation=True,
             verbose=True
         )
@@ -159,49 +133,38 @@ def create_squad(squad_config: Dict[str, Any], agents: List[Agent], tasks: List[
     return Squad(
         name=squad_config["name"],
         agents=squad_agents,
-        tasks=squad_tasks,
+        tasks=tasks,
         process=Process.sequential if squad_config["process"] == "sequential" else Process.hierarchical,
         memory=True,
         embedder={
             "provider": "cohere",
             "config": {
-                "model": "embed-english-v3.0", "vector_dimension": 1024
-                }
-            },
+                "model": "embed-english-v3.0",
+                "vector_dimension": 1024
+            }
+        },
         verbose=squad_config["verbose"],
         manager_agent=manager
     )
 
 def run_squad(config: Dict[str, Any], user_prompt: str) -> str:
-    """
-    Run the squad based on the configuration.
-    """
-    agents = [create_agent(agent_config) for agent_config in config["agents"]]
-    tasks = [create_task(task_config, agents) for task_config in config["tasks"]]
-    squads = [create_squad(squad_config, agents, tasks) for squad_config in config["squads"]]
+    """Run the squad based on the configuration."""
+    agents = {agent_config["role"]: create_agent(agent_config) for agent_config in config["agents"]}
+    tasks = [create_task(task_config, agents[task_config["agent"]]) for task_config in config["tasks"]]
+    squad = create_squad(config["squad"], agents, tasks)
 
-    result = "Running squads:\n"
-    for squad in squads:
-        squad_result = squad.kickoff()
-        result += f"\n{squad.name}: {squad_result}"
-    return result
-
-def run_dynamic_squad(user_prompt: str) -> str:
-    """
-    Run a dynamically created squadAI based on the user's prompt.
-    """
-    config = get_squad_config(user_prompt)
-    return run_squad(config, user_prompt)
+    result = squad.kickoff()
+    return f"Squad '{squad.name}' result: {result}"
 
 def main():
     user_prompt = input("Enter your goal for squadAI: ")
     try:
-        result = run_dynamic_squad(user_prompt)
-
+        config = get_squad_config(user_prompt)
+        result = run_squad(config, user_prompt)
+        print(result)
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         print("Please try again with a different prompt or check your configuration.")
-    
 
 if __name__ == "__main__":
     main()
